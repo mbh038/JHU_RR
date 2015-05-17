@@ -1,0 +1,39 @@
+My first R Markdown file
+========================
+
+This is my first R Markdown file.
+
+Here we are going to load some data.
+
+```{r}
+library(datasets)
+data(airquality)
+summary(airquality)
+```
+
+Now let's make  a pairs plot of the data
+
+```{r}
+pairs(airquality)
+```
+
+Here's a regression model of ozone on wind, solar radiation and temperature.
+
+```{r}
+library(stats)
+fit<-lm(Ozone~Wind+Solar.R+Temp,data=airquality)
+summary(fit)
+```
+Here's an unordered list
+
+* Item 1
+* Item 2
+* Item 3
+
+Here's some LaTeX display maths.
+
+$$
+y=\dfrac{x^2}{2a}
+$$
+
+and this $y=x^2$ is an example of inline LaTeX maths.
