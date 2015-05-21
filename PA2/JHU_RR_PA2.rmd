@@ -1,0 +1,66 @@
+---
+title: "JHU_RR_PA2"
+author: "mbh"
+date: "Thursday, May 21, 2015"
+output: html_document
+---
+
+# Title
+
+# Synopsis
+
+No more than 10 sentences
+
+... other sections
+
+# data Source
+
+The NOAA data for this analysis is taken from the link provided on the JHU Reproducible Research Peer Assignment 2 Coursera site:
+
+[Storm data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) [47Mb]
+
+Information on this data is available here
+
+National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+We save it into a csv file on our local machine
+
+```{r cache=TRUE}
+# Download data
+
+if(!file.exists("data")){
+        dir.create("data")
+}
+
+# download data if not yet already done so
+if(!file.exists("./data/stormData.csv")){
+        
+        #download a data file as csv into the "data" dir
+        
+        fileURL<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+        download.file(fileURL,destfile="./data/stormData.csv")
+        #include date of download
+        datedownloaded<-date()
+        datedownloaded
+        
+}
+```
+
+# Date Processing
+
+'' other sections
+
+consider cache=TRUE
+
+# Results
+
+Required
+
+At least 1 figure containing a plot
+
+No more than 3 Figures
+
+Include all code. Use echo = TRUE
+
