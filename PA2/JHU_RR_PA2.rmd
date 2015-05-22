@@ -33,7 +33,8 @@ No more than 10 sentences
 ## Set working directory
 ```{r setwd}
 rm(list=ls())
-setwd("C:/Users/Mike/Rspace/JHU_RR/PA2") # amend pathway as required
+#setwd("C:/Users/Mike/Rspace/JHU_RR/PA2") # amend pathway as required
+setwd("H:/Rspace/JHU_Data_Science/JHU_RR/PA2")
 ```
 ## Load libraries
 ```{r}
@@ -68,7 +69,7 @@ if(!file.exists("data")){
 ```
 
 ### Download data if not yet already done so
-```{r download data file, cache=TRUE}
+```{r download data file}
 if(!file.exists("./data/stormData.csv.bz2")){
         fileURL<-"http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
         download.file(fileURL,destfile="./data/stormData.csv.bz2")
@@ -79,7 +80,7 @@ if(!file.exists("./data/stormData.csv.bz2")){
 ```
 ### Load data into R
 ```{r}
-# using cache here causes memory overlaod in my computer!
+# using cache here causes memory overload in my computer!
 # To do: find a faster way to read the data into R.
 file<- bzfile(description = "./data/stormData.csv.bz2", open = 'r', encoding =
 getOption('encoding'), compression = 9)
@@ -110,7 +111,7 @@ library(dplyr)
 df1 <-select(stormdata,STATE__:EVTYPE,FATALITIES:CROPDMGEXP)
 str(df1)
 ```
-```{r filter out null EVTYPE rows}
+```{r filter out null event rows}
 df2<-filter(df1,FATALITIES+INJURIES+PROPDMG+CROPDMG>0 )
 str(df2)
 ```
@@ -176,6 +177,9 @@ with(annual.totals,plot(Year,Fatalities.Injuries,
                         )
         )
            
+```{r}
+
+```
 
 ```
 We note a huge rise in fatalities and injuries from about 1990 onwards. This probably reflects a rise in the available volume of data, rather than an actual rise'
@@ -204,13 +208,16 @@ evtype<-c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood","Cold/W
 evtype
 ```
 
-```{r cache=TRUE}
-# then we cycle through the EVTYPE column in our reduced set and allocate each row to  whichever (If any) of the above categories contains it. 
 
+
+```{r}
+# then we cycle through the EVTYPE column in our reduced set and allocate each row to  whichever (If any) of the above categories contains it. 
 f<-function(x){
         s<-grepl(x,sd.red$EVTYPE,ignore.case=TRUE)     
 }
 t<-sapply(evtype[1:length(evtype)],f)
+tn<-as.numeric(t)
+rm(t)
 ```
 
 ```r{}
@@ -220,9 +227,13 @@ r.evtype<-rowSums(t,na.rm=TRUE)
 sum(n.evtype)
 sum(r.evtype[]>1)
 ```
-The number of captured events is `r sum(n.evtype)` from a possible total of `r nrow(sd.dev). This is a large enough sample for conclusions drawn from it to be representativew of the whole data set.
+The number of captured events is `r sum(n.evtype)` from a possible total of `r nrow(sd.dev)`. This is a large enough sample for conclusions drawn from it to be representativew of the whole data set.
 
-`We now create a column with the reduced type set of type descriptors that we have identified mapped against those actually in EVTYPE.
+We now create a column with the reduced type set of type descriptors that we have identified mapped against those actually in EVTYPE.
+
+
+
+
 
 ```{r}
 f<-function(x){
