@@ -5,6 +5,22 @@ date: "Thursday, May 21, 2015"
 output: html_document
 ---
 
+# Instructions
+
+## Assignment
+
+The basic goal of this assignment is to explore the NOAA Storm Database and answer some basic questions about severe weather events. You must use the database to answer the questions below and show the code for your entire analysis. Your analysis can consist of tables, figures, or other summaries. You may use any R package you want to support your analysis.
+
+## Questions
+
+Your data analysis must address the following questions:
+
+* Across the United States, which types of **events** (as indicated in the EVTYPE variable) are **most harmful with respect to population health**?
+
+* Across the United States, which types of **events** have the **greatest economic consequences**?
+
+Consider writing your report as if it were to be read by a government or municipal manager who might be responsible for preparing for severe weather events and will need to prioritize resources for different types of events. However, there is no need to make any specific recommendations in your report.
+
 # Title
 
 # Synopsis
@@ -13,11 +29,25 @@ No more than 10 sentences
 
 ... other sections
 
-# data Source
+# Set up
+## Set working directory
+```{r setwd}
+rm(list=ls())
+setwd("C:/Users/Mike/Rspace/JHU_RR/PA2") # amend pathway as required
+```
+## Load libraries
+```{r}
+library(dplyr)
+```
+```{r}
+library(data.table)
+```
+
+# Data Source
 
 The NOAA data for this analysis is taken from the link provided on the JHU Reproducible Research Peer Assignment 2 Coursera site:
 
-[Storm data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) [47Mb]
+[Storm data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2,) [47Mb]
 
 Information on this data is available here
 
@@ -25,30 +55,183 @@ National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloud
 
 National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
 
-We save it into a csv file on our local machine
+We save it into a csv.bz2 file on our local machine
 
-```{r cache=TRUE}
+
 # Download data
 
+### Create data directory if it doesn't already exist
+```{r }
 if(!file.exists("data")){
         dir.create("data")
 }
-
-# download data if not yet already done so
-if(!file.exists("./data/stormData.csv")){
-        
-        #download a data file as csv into the "data" dir
-        
-        fileURL<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
-        download.file(fileURL,destfile="./data/stormData.csv")
-        #include date of download
-        datedownloaded<-date()
-        datedownloaded
-        
-}
 ```
 
-# Date Processing
+### Download data if not yet already done so
+```{r download data file, cache=TRUE}
+if(!file.exists("./data/stormData.csv.bz2")){
+        fileURL<-"http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+        download.file(fileURL,destfile="./data/stormData.csv.bz2")
+        #include date of download
+        datedownloaded<-date()
+        datedownloaded     
+}
+```
+### Load data into R
+```{r}
+# using cache here causes memory overlaod in my computer!
+# To do: find a faster way to read the data into R.
+file<- bzfile(description = "./data/stormData.csv.bz2", open = 'r', encoding =
+getOption('encoding'), compression = 9)
+stormdata <- read.csv(file, header = TRUE, stringsAsFactors = FALSE)
+```
+
+# Data Processing
+
+### Initial Inspection of the data
+
+```{r}
+
+str(stormdata)
+
+#check for NAs
+mean(is.na(stormdata$FATALITIES))
+mean(is.na(stormdata$INJURIES))
+mean(is.na(stormdata$PROPDMG))
+mean(is.na(stormdata$CROPDMG))
+
+```
+There are no NAs in these relevant data columns. Yay!
+
+### Reduce the size of the data set
+
+```{r select only the columns we need}
+library(dplyr)
+df1 <-select(stormdata,STATE__:EVTYPE,FATALITIES:CROPDMGEXP)
+str(df1)
+```
+```{r filter out null EVTYPE rows}
+df2<-filter(df1,FATALITIES+INJURIES+PROPDMG+CROPDMG>0 )
+str(df2)
+```
+```{r extract year from the BGN_DATE column}
+library(lubridate)
+year<-as.POSIXlt(mdy_hms(df2$BGN_DATE))
+year<-year$year+1900
+summary(year) # check this looks OK.
+# include this column in the reduced data set df2
+sd.red<-data.frame(year,df2)
+```
+
+```{r annual totals of fatalities and injuries}
+fit.i<-aggregate(sd.red$INJURIES,by=list(sd.red$year),FUN="sum")
+fit.f<-aggregate(sd.red$FATALITIES,by=list(sd.red$year),FUN="sum")
+fit<-data.frame(fit.i$Group.1,fit.i$x+fit.f$x)
+summary(fit)
+names(fit)[names(fit)=="fit.i.Group.1"] <- "Year"
+names(fit)[names(fit)=="fit.i.x...fit.f.x"] <- "Fatalities.Injuries"
+```
+```{r annual totals of damage value}
+pt<-aggregate(sd.red$PROPDMG,by=list(sd.red$year),FUN="sum")
+ct<-aggregate(sd.red$CROPDMG,by=list(sd.red$year),FUN="sum")
+pct<-data.frame(pt$Group.1,pt$x+ct$x)
+summary(pct)
+names(pct)[names(pct)=="pt.Group.1"] <- "Year"
+names(pct)[names(pct)=="pt.x...ct.x"] <- "Totals"
+```
+Merge these two totals together
+```{r}
+annual.totals<-fit
+annual.totals$Damage<-pct$Totals
+#names(annual.totals)[names(annual.totals)=="pct$Total.Damage"] <- "Total.Damage"
+str(annual.totals)
+```
+
+Exploratory analysis of these annual totals
+```{r}
+library(ggplot2)
+
+par(mfrow = c(1, 2))
+par(mar = c(3, 4,3,1))
+par(bg="white")
+
+with(annual.totals,plot(Year,Fatalities.Injuries,
+                        xlim=c(1950,2020),
+                        ylim=c(0,max(annual.totals$Fatalities.Injuries)),
+                        xlab="Year",
+                        ylab="Annual fatalities and Injuries",
+                        pch=19,
+                        col="red",
+                        #main="Fatalities / Injuries"
+                        )
+        )
+ with(annual.totals,plot(Year,Damage,
+                        xlim=c(1950,2020),
+                        ylim=c(0,max(annual.totals$Damage)),
+                        xlab="Year",
+                        ylab="Annual crop damage",
+                        pch=19,
+                        col="blue",
+                        #main="Property and crop damage ($)"
+                        )
+        )
+           
+
+```
+We note a huge rise in fatalities and injuries from about 1990 onwards. This probably reflects a rise in the available volume of data, rather than an actual rise'
+
+
+We could investigate this here:
+
+### Analysis by type
+
+How many types of event have been recorded?
+
+```{r}
+evtype.recorded<-length(unique(sd.red$EVTYPE))
+
+```
+The number of ditinct event types recorded in the data set is `r evtype.recorded`. This is far greater than the 46 distinct event types recognised by NOAA.
+
+We will try and allocate as many as possible of the recorded event types to **one** of these official categories. If the total number captured is a high proportion of the total set, it will be prepresentative of the whole.
+
+### Allocation of event categories.
+
+#First, we construct a character vector that contains these category names as written 
+# in the NOAA documentation:
+```r{}
+evtype<-c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood","Cold/Wind Chill","Debris Flow","Dense Fog","Dense Smoke","Drought","Dust Devil","Dust Storm","Excessive Heat","Extreme Cold/Wind Chill","Flash Flood","Flood","Frost/Freeze","Funnel Cloud","Freezing Fog","Hail","Heat","Heavy Snow","High Surf","High Wind","Hurricane (Typhoon)","Ice Storm","Lake-Effect Snow","Lakeshore Flood","Lightning","Marine Hail","Marine High Wind","Marine Strong Wind","Marine Thunderstorm Wind","Rip Current","Seiche","Sleet","Storm Surge/Tide","Strong Wind","Thunderstorm Wind","Tornado","Tropical Depression","Tropical Storm","Tsunami","Volcanic Ash","Waterspout","Wildfire","Winter Storm","Winter Weather")
+evtype
+```
+
+```{r cache=TRUE}
+# then we cycle through the EVTYPE column in our reduced set and allocate each row to  whichever (If any) of the above categories contains it. 
+
+f<-function(x){
+        s<-grepl(x,sd.red$EVTYPE,ignore.case=TRUE)     
+}
+t<-sapply(evtype[1:length(evtype)],f)
+```
+
+```r{}
+# check lengths of each column of t
+n.evtype<-colSums(t,na.rm=TRUE)
+r.evtype<-rowSums(t,na.rm=TRUE)
+sum(n.evtype)
+sum(r.evtype[]>1)
+```
+The number of captured events is `r sum(n.evtype)` from a possible total of `r nrow(sd.dev). This is a large enough sample for conclusions drawn from it to be representativew of the whole data set.
+
+`We now create a column with the reduced type set of type descriptors that we have identified mapped against those actually in EVTYPE.
+
+```{r}
+f<-function(x){
+        which(isTRUE(t[,x]))<-evtype[x]   
+}
+ev.red<-sapply(c(1:length(evtype)),f)
+
+```
+
 
 '' other sections
 
