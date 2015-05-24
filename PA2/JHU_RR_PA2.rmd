@@ -33,15 +33,16 @@ No more than 10 sentences
 ## Set working directory
 ```{r setwd}
 rm(list=ls())
-#setwd("C:/Users/Mike/Rspace/JHU_RR/PA2") # amend pathway as required
-setwd("H:/Rspace/JHU_Data_Science/JHU_RR/PA2")
+setwd("C:/Users/Mike/Rspace/JHU_RR/PA2") # amend pathway as required
+#setwd("H:/Rspace/JHU_Data_Science/JHU_RR/PA2")
 ```
 ## Load libraries
 ```{r}
 library(dplyr)
-```
-```{r}
+library(ggplot2)
+library(tidyr)
 library(data.table)
+library(lubridate)
 ```
 
 # Data Source
@@ -62,7 +63,7 @@ We save it into a csv.bz2 file on our local machine
 # Download data
 
 ### Create data directory if it doesn't already exist
-```{r }
+```{r download the file}
 if(!file.exists("data")){
         dir.create("data")
 }
@@ -79,7 +80,7 @@ if(!file.exists("./data/stormData.csv.bz2")){
 }
 ```
 ### Load data into R
-```{r}
+```{r load into R}
 # using cache here causes memory overload in my computer!
 # To do: find a faster way to read the data into R.
 file<- bzfile(description = "./data/stormData.csv.bz2", open = 'r', encoding =
@@ -91,7 +92,7 @@ stormdata <- read.csv(file, header = TRUE, stringsAsFactors = FALSE)
 
 ### Initial Inspection of the data
 
-```{r}
+```{r initial inspection}
 
 str(stormdata)
 
@@ -100,19 +101,21 @@ mean(is.na(stormdata$FATALITIES))
 mean(is.na(stormdata$INJURIES))
 mean(is.na(stormdata$PROPDMG))
 mean(is.na(stormdata$CROPDMG))
-
+# There are no NAs in these relevant data columns. Yay!
 ```
-There are no NAs in these relevant data columns. Yay!
+
 
 ### Reduce the size of the data set
 
 ```{r select only the columns we need}
 library(dplyr)
 df1 <-select(stormdata,STATE__:EVTYPE,FATALITIES:CROPDMGEXP)
+rm(stormdata)
 str(df1)
 ```
 ```{r filter out null event rows}
 df2<-filter(df1,FATALITIES+INJURIES+PROPDMG+CROPDMG>0 )
+rm(df1)
 str(df2)
 ```
 ```{r extract year from the BGN_DATE column}
@@ -122,6 +125,7 @@ year<-year$year+1900
 summary(year) # check this looks OK.
 # include this column in the reduced data set df2
 sd.red<-data.frame(year,df2)
+rm(df2,year)
 ```
 
 ```{r annual totals of fatalities and injuries}
@@ -144,12 +148,13 @@ Merge these two totals together
 ```{r}
 annual.totals<-fit
 annual.totals$Damage<-pct$Totals
+rm(fit.i,fit.f,fit,pt,ct,pct) # clean up
 #names(annual.totals)[names(annual.totals)=="pct$Total.Damage"] <- "Total.Damage"
 str(annual.totals)
 ```
 
 Exploratory analysis of these annual totals
-```{r}
+```{r plot eda figure}
 library(ggplot2)
 
 par(mfrow = c(1, 2))
@@ -177,10 +182,6 @@ with(annual.totals,plot(Year,Fatalities.Injuries,
                         )
         )
            
-```{r}
-
-```
-
 ```
 We note a huge rise in fatalities and injuries from about 1990 onwards. This probably reflects a rise in the available volume of data, rather than an actual rise'
 
@@ -189,59 +190,102 @@ We could investigate this here:
 
 ### Analysis by type
 
-How many types of event have been recorded?
+We wish to identify those weather types that have been most damaging to people, in terms of numbers of fatalities and injuries caused, and to crops and property in economic terms. The categories used will be those recognised by NOAA:
 
-```{r}
-evtype.recorded<-length(unique(sd.red$EVTYPE))
-
-```
-The number of ditinct event types recorded in the data set is `r evtype.recorded`. This is far greater than the 46 distinct event types recognised by NOAA.
-
-We will try and allocate as many as possible of the recorded event types to **one** of these official categories. If the total number captured is a high proportion of the total set, it will be prepresentative of the whole.
-
-### Allocation of event categories.
-
-#First, we construct a character vector that contains these category names as written 
-# in the NOAA documentation:
-```r{}
-evtype<-c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood","Cold/Wind Chill","Debris Flow","Dense Fog","Dense Smoke","Drought","Dust Devil","Dust Storm","Excessive Heat","Extreme Cold/Wind Chill","Flash Flood","Flood","Frost/Freeze","Funnel Cloud","Freezing Fog","Hail","Heat","Heavy Snow","High Surf","High Wind","Hurricane (Typhoon)","Ice Storm","Lake-Effect Snow","Lakeshore Flood","Lightning","Marine Hail","Marine High Wind","Marine Strong Wind","Marine Thunderstorm Wind","Rip Current","Seiche","Sleet","Storm Surge/Tide","Strong Wind","Thunderstorm Wind","Tornado","Tropical Depression","Tropical Storm","Tsunami","Volcanic Ash","Waterspout","Wildfire","Winter Storm","Winter Weather")
+```{r NOAA event type list}
+evtype<-c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood","Cold/Wind Chill","Debris Flow","Dense Fog","Dense Smoke","Drought","Dust Devil","Dust Storm","Excessive Heat","Extreme Cold/Wind Chill","Flash Flood","Flood","Frost/Freeze","Funnel Cloud","Freezing Fog","Hail","Heat","Heavy Rain","Heavy Snow","High Surf","High Wind","Hurricane","Ice Storm","Lake-Effect Snow","Lakeshore Flood","Lightning","Marine Hail","Marine High Wind","Marine Strong Wind","Marine Thunderstorm Wind","Rip Current","Seiche","Sleet","Storm Surge/Tide","Strong Wind","Thunderstorm Wind","Tornado","Tropical Depression","Tropical Storm","Tsunami","Volcanic Ash","Waterspout","Wildfire","Winter Storm","Winter Weather")
 evtype
+levtypes<-length(evtype)
 ```
+which number `r levtypes` in all
 
+and the number of event types actually recorded
 
+```{r unique event record types}
+evrep<-sd.red$EVTYPE
+nevrec<-length(unique(evrep))
+```
+of which there are `r nevrec` we see that many events must have been recorded with non-standard terms. Hence before final analysis, the recorded events have had to be mapped to one or other of the recognised categories. This has been achieved by a process of matching terms, identifying common alternative terms (eg TSTM for thunderstorm, precipitation for rain etc), and correction of obvious typographical errors eg TORNDAo etc.
+
+The matching process is described below and may be skipped if not of interest. The criterion for this process was that at least 95% of the reported events should be mapped to one NOAA category. Those that could not be mapped were not included in the final analysis.
+
+### Mapping of reported weather events to NOAA categories.
+
+This is an iterative process.
+
+First, we make some substitutions:
+
+* _TSTM_ replaced by _Thunderstorm_
+* _Precipitation_ replaced by _Rain_
+
+```{r fix typos etc}
+evrep<-sd.red$EVTYPE
+evrep<-gsub("Precipitation|drizzle|shower","RAIN",evrep,ignore.case=TRUE)
+evrep<-gsub("TSTM|THUNDERESTORM|THUNERSTORM|THUNDEERSTORM|THUNDERTORM",
+            "THUNDERSTORM",evrep,ignore.case=TRUE)
+evrep<-gsub("STROM","STORM",evrep,ignore.case=TRUE)
+evrep<-gsub("TUN","THUN",evrep,ignore.case=TRUE)
+evrep<-gsub("THUNDERSTORM\\S","THUNDERSTORM\\s",evrep,ignore.case=TRUE)
+evrep<-gsub("STORMS","STORM",evrep,ignore.case=TRUE)
+evrep<-gsub("WINDS|WINS","WIND",evrep,ignore.case=TRUE)
+evrep<-gsub("Typhoon","Hurricane",evrep,ignore.case=TRUE)
+evrep<-gsub("Hurricane\\s[A-z]|Hurricane[A-z]","Hurricane",evrep,ignore.case=TRUE)
+evrep<-gsub("ASTRONOMICAL HIGH TIDE","Storm Surge/Tide",evrep,ignore.case=TRUE)
+evrep<-gsub("Whirlwind|Torndao","TORNADO",evrep,ignore.case=TRUE)
+evrep<-gsub("Lighting|LIGNTNING","Lightning",evrep,ignore.case=TRUE)
+evrep<-gsub("Excessive|Hvy|Severe","HEAVY",evrep,ignore.case=TRUE)
+```
+```{r}
+evred<-sapply(1:levtypes,function(x){
+        grep(evtype[x],evrep,ignore.case=TRUE)
+})
+```
+```{r}
+event<-c(rep("NULL",nrow(sd.red)))
+for(i in 1:47){
+        event[evred[[i]]]<-evtype[i]
+}
+```
+```{r check missing}
+missed<-evrep[grep("NULL",event)]
+unique(missed)
+length(missed)
+length(missed)/length(event)
+```
+Capture rate is `r length(missed)/length(event)`
+
+This exceeds the threhold of 95% set for completeness of capture.
 
 ```{r}
-# then we cycle through the EVTYPE column in our reduced set and allocate each row to  whichever (If any) of the above categories contains it. 
-f<-function(x){
-        s<-grepl(x,sd.red$EVTYPE,ignore.case=TRUE)     
-}
-t<-sapply(evtype[1:length(evtype)],f)
-tn<-as.numeric(t)
-rm(t)
+# Add mapped weather type vector to the reduced data set
+sd.red<-data.frame(select(sd.red,year:EVTYPE),
+                    event,
+                    select(sd.red,FATALITIES:CROPDMGEXP),
+                    stringsAsFactors=FALSE)
 ```
 
-```r{}
-# check lengths of each column of t
-n.evtype<-colSums(t,na.rm=TRUE)
-r.evtype<-rowSums(t,na.rm=TRUE)
-sum(n.evtype)
-sum(r.evtype[]>1)
+## Ranking of Events by Human Impact
+
+```{r human rank}
+fatalities<-sd.red %>% group_by(event) %>% summarise(fatalities=sum(FATALITIES))
+injuries<-sd.red %>% group_by(event) %>% summarise(injuries=sum(INJURIES))
+human<-left_join(fatalities,injuries,by="event")
+human<-mutate(human,total=fatalities+injuries)
+human<-human %>% mutate(fatalityrank=dense_rank(desc(fatalities)))
+human<-human %>% mutate(injuriesrank=dense_rank(desc(injuries)))
+human<-human %>% mutate(totalrank=dense_rank(desc(total)))
+human
 ```
-The number of captured events is `r sum(n.evtype)` from a possible total of `r nrow(sd.dev)`. This is a large enough sample for conclusions drawn from it to be representativew of the whole data set.
-
-We now create a column with the reduced type set of type descriptors that we have identified mapped against those actually in EVTYPE.
-
-
-
-
-
-```{r}
-f<-function(x){
-        which(isTRUE(t[,x]))<-evtype[x]   
-}
-ev.red<-sapply(c(1:length(evtype)),f)
+```{r human tidy}
 
 ```
+## Ranking by number of fatalities/Injuries caused
+
+
+
+Now we rank the weather event types according to the number of fatalites and injuries caused.
+
+We present results showing both the total and the median values for each of these.
 
 
 '' other sections
