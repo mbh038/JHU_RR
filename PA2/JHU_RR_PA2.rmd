@@ -90,7 +90,7 @@ stormdata <- read.csv(file, header = TRUE, stringsAsFactors = FALSE)
 
 # Data Processing
 
-### Initial Inspection of the data
+## Initial Inspection of the data
 
 ```{r initial inspection}
 
@@ -107,18 +107,23 @@ mean(is.na(stormdata$CROPDMG))
 
 ### Reduce the size of the data set
 
+All rows of the data set for which fatalities, injuries, crop damage and property damage values were all zero are removed from the data set, as are columns that will not be used in the subsequent analysis..
+
 ```{r select only the columns we need}
+# select columns required
 library(dplyr)
 df1 <-select(stormdata,STATE__:EVTYPE,FATALITIES:CROPDMGEXP)
 rm(stormdata)
 str(df1)
 ```
 ```{r filter out null event rows}
+# filter out null rows
 df2<-filter(df1,FATALITIES+INJURIES+PROPDMG+CROPDMG>0 )
 rm(df1)
 str(df2)
 ```
 ```{r extract year from the BGN_DATE column}
+# extract year from the date column
 library(lubridate)
 year<-as.POSIXlt(mdy_hms(df2$BGN_DATE))
 year<-year$year+1900
@@ -188,7 +193,7 @@ We note a huge rise in fatalities and injuries from about 1990 onwards. This pro
 
 We could investigate this here:
 
-### Analysis by type
+## Analysis by type
 
 We wish to identify those weather types that have been most damaging to people, in terms of numbers of fatalities and injuries caused, and to crops and property in economic terms. The categories used will be those recognised by NOAA:
 
@@ -241,13 +246,13 @@ evred<-sapply(1:levtypes,function(x){
 })
 ```
 ```{r}
-event<-c(rep("NULL",nrow(sd.red)))
+event<-c(rep("Other",nrow(sd.red)))
 for(i in 1:47){
         event[evred[[i]]]<-evtype[i]
 }
 ```
 ```{r check missing}
-missed<-evrep[grep("NULL",event)]
+missed<-evrep[grep("Other",event)]
 unique(missed)
 length(missed)
 length(missed)/length(event)
@@ -257,42 +262,165 @@ Capture rate is `r length(missed)/length(event)`
 This exceeds the threhold of 95% set for completeness of capture.
 
 ```{r}
-# Add mapped weather type vector to the reduced data set
+# Add the mapped weather type vector to the reduced data set
 sd.red<-data.frame(select(sd.red,year:EVTYPE),
                     event,
                     select(sd.red,FATALITIES:CROPDMGEXP),
                     stringsAsFactors=FALSE)
 ```
+```{r overall metrics for human impact}
+
+tfatalities <-sum(sd.red$FATALITIES)
+tinjuries<-sum(sd.red$INJURIES)
+ttotal<-tfatalities+tinjuries
+
+tpropdmg <-sum(sd.red$PROPDMG)
+tcropdmg <-sum(sd.red$cROPDMG)
+dtotal<-tpropdmg+tcropdmg
+```
+
 
 ## Ranking of Events by Human Impact
 
 ```{r human rank}
+#find fatality and injury number for each event type
 fatalities<-sd.red %>% group_by(event) %>% summarise(fatalities=sum(FATALITIES))
 injuries<-sd.red %>% group_by(event) %>% summarise(injuries=sum(INJURIES))
 human<-left_join(fatalities,injuries,by="event")
 human<-mutate(human,total=fatalities+injuries)
-human<-human %>% mutate(fatalityrank=dense_rank(desc(fatalities)))
-human<-human %>% mutate(injuriesrank=dense_rank(desc(injuries)))
-human<-human %>% mutate(totalrank=dense_rank(desc(total)))
-human
+# add a totals row at the top
+human<-arrange(human,desc(total))
+totals<-data.frame("Total",tfatalities,tinjuries,ttotal)
+names(totals)<-names(human)
+human<-rbind(totals,human)
+
+# calculate each row as % of total
+fatfrac<-100*human$fatalities/ttotal
+injfrac<-100*human$injuries/ttotal
+totfrac<-100*human$total/ttotal
+
+# calculate sum contribution of top 5.
+top5frac<-sum(fatfrac[2:6])
+top5inj<-sum(injfrac[2:6])
+top5tot<-sum(totfrac[2:6])
+
+# combine for reults table
+human<-cbind(human,fatfrac,injfrac,totfrac)
+human$event<-as.character(human$event)
+humantop6<-human[1:6,]
+names(humantop6)[names(humantop6)=="fatfrac"] <- "Fatalities"
+names(humantop6)[names(humantop6)=="injfrac"] <- "Injuries"
 ```
 ```{r human tidy}
+# melt data for plot
+library(reshape2)
+hmelt<-melt(humantop6,id="event",measure.vars=c("Fatalities","Injuries"))
+hmelt$event<-as.factor(hmelt$event)
+hmelt$variable<-as.factor(hmelt$variable)
+hmelt<-arrange(hmelt,desc(variable),desc(value))
 
+## set the levels in order we want
+
+hmelt <- transform(hmelt, 
+                event.ord  = factor(
+                     event ,
+                     levels=c( 'Lightning','Flood','Thunderstorm Wind', 'Heat','Tornado','Total'),
+                     ordered =TRUE))
 ```
-## Ranking by number of fatalities/Injuries caused
 
 
 
-Now we rank the weather event types according to the number of fatalites and injuries caused.
+## Ranking of Events by Economic Impact
+```{r economic  rank}
+#find property and crop damage value for each event type
+propdmg<-sd.red %>% group_by(event) %>% summarise(propdmg=sum(PROPDMG))
+cropdmg<-sd.red %>% group_by(event) %>% summarise(cropdmg=sum(CROPDMG))
+damage<-left_join(propdmg,cropdmg,by="event")
+damage<-mutate(damage,totald=propdmg+cropdmg)
+# add a totals row at the top
+damage<-arrange(damage,desc(totald))
+totalsd<-data.frame("Total",tpropdmg,tcropdmg,dtotal)
+names(totalsd)<-names(damage)
+damage<-rbind(totalsd,damage)
 
-We present results showing both the total and the median values for each of these.
+# calculate each row as % of total
+propfrac<-100*damage$propdmg/dtotal
+cropfrac<-100*damage$cropdmg/dtotal
+dtotfrac<-100*damage$totald/dtotal
 
+# calculate sum contribution of top 5.
+dtop5frac<-sum(propfrac[2:6])
+dtop5inj<-sum(cropfrac[2:6])
+dtop5tot<-sum(dtotfrac[2:6])
 
-'' other sections
+# combine for reults table
+damage<-cbind(damage,propfrac,cropfrac,dtotfrac)
+damage$event<-as.character(damage$event)
+damagetop6<-damage[1:6,]
+names(damagetop6)[names(damagetop6)=="propfrac"] <- "Property"
+names(damagetop6)[names(damagetop6)=="cropfrac"] <- "Crops"
+```
+```{r damage tidy}
+# melt data for plot
+library(reshape2)
+dmelt<-melt(damagetop6,id="event",measure.vars=c("Property","Crops"))
+dmelt$event<-as.factor(dmelt$event)
+dmelt$variable<-as.factor(dmelt$variable)
+dmelt<-arrange(dmelt,desc(variable),desc(value))
 
-consider cache=TRUE
+## set the levels in order we want
+
+#hmelt <- transform(hmelt, 
+#                event.ord  = factor(
+#                     event ,
+#                     levels=c( 'Lightning','Flood','Thunderstorm Wind', #'Heat','Tornado','Total'),
+#                     ordered =TRUE))
+```
 
 # Results
+
+## Injuries and Fatalities
+
+```{r bar chart human}
+#g<-ggplot(data=hmelt, aes(x=event, y=value, fill=variable)) +
+#   geom_bar(stat="identity", position=position_dodge())
+
+g<-ggplot(data=hmelt,
+          aes(x=event.ord,y=value,fill=variable,order=event.ord))+
+        geom_bar(stat="identity")+
+        #facet_wrap(~variable)+
+        coord_flip()+
+        scale_y_continuous(breaks = seq(0, 100, 10))+
+        theme(axis.text.x = element_text(size=14),
+        axis.text.y=element_text(size=14))+
+        labs(y = "% of total fatalities and injuries")+
+        theme(axis.title.x = element_text(size=14,vjust=-.5),
+        axis.title.y=element_blank())+
+        theme(legend.text=element_text(size=12),
+                legend.title = element_blank())+
+        theme(legend.position=c(.8, .2))
+g
+```
+
+## Economic damage
+```{r bar chart economic}
+d<-ggplot(data=dmelt,
+        aes(x=event, y=value,fill=variable,order=event))+
+        geom_bar(stat="identity")+
+        #facet_wrap(~variable)+
+        coord_flip()+
+        scale_y_continuous(breaks = seq(0, 100, 10))+
+        theme(axis.text.x = element_text(size=14),
+        axis.text.y=element_text(size=14))+
+        labs(y = "Value of damage caused")+
+        theme(axis.title.x = element_text(size=14,vjust=-.5),
+        axis.title.y=element_blank())+
+        theme(legend.text=element_text(size=12),
+                legend.title = element_blank())+
+        theme(legend.position=c(.8, .2))
+d
+```
+
 
 Required
 
