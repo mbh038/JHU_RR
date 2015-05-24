@@ -1,33 +1,29 @@
 ---
-title: "JHU_RR_PA2"
-author: "mbh"
+title: "Analysis of Impacts of US Weather Events 1950-2012"
+author: "Michael Hunt"
 date: "Thursday, May 21, 2015"
 output: html_document
 ---
 
-# Instructions
-
-## Assignment
-
-The basic goal of this assignment is to explore the NOAA Storm Database and answer some basic questions about severe weather events. You must use the database to answer the questions below and show the code for your entire analysis. Your analysis can consist of tables, figures, or other summaries. You may use any R package you want to support your analysis.
-
-## Questions
-
-Your data analysis must address the following questions:
-
-* Across the United States, which types of **events** (as indicated in the EVTYPE variable) are **most harmful with respect to population health**?
-
-* Across the United States, which types of **events** have the **greatest economic consequences**?
-
-Consider writing your report as if it were to be read by a government or municipal manager who might be responsible for preparing for severe weather events and will need to prioritize resources for different types of events. However, there is no need to make any specific recommendations in your report.
-
-# Title
+Determination of weather event types in the US that have caused the greatest number of fatalities and injuries, and had the greatest economic impact on property and crops
 
 # Synopsis
 
-No more than 10 sentences
+This study identifies the 10 weather event types that are most harmful to human health, in terms of number of fatalities and injuries caused in the US since 1950, and the 10 weather event types that have had the greatest economic impact on property and crops, in terms of value of damage caused. The weather event types are those defined by the NOAA here
 
-... other sections
+National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+The data were provided by the NOAA and were sourced from here:
+
+[Storm data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2,) [47Mb]
+
+The data contained many errors, in that many events had not been categorised or had not been recorded in the required manner, either in respect of recorded weather type, or by value multipler.
+
+A procedure was carried out to map actual recorded data to one of the correct categories, and to omit data that could not be mapped. The final data set captured 94% of total fatalities and injuries, and 97% of total damage value to property and crops.
+
+The top three most damaging weather types in terms of impact on human health have been (in descending order) tornados, heat, and thuderstorms, whiile the top three in terms of economic impact on property and crops have been floods, hurricanes and tornados
+
+
 
 # Set up
 ## Set working directory
@@ -43,6 +39,8 @@ library(ggplot2)
 library(tidyr)
 library(data.table)
 library(lubridate)
+library(pander)
+panderOptions('round', 2)
 ```
 
 # Data Source
@@ -59,8 +57,9 @@ National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfro
 
 We save it into a csv.bz2 file on our local machine
 
+# Data Processing
 
-# Download data
+## Download data and load into R
 
 ### Create data directory if it doesn't already exist
 ```{r download the file}
@@ -76,7 +75,8 @@ if(!file.exists("./data/stormData.csv.bz2")){
         download.file(fileURL,destfile="./data/stormData.csv.bz2")
         #include date of download
         datedownloaded<-date()
-        datedownloaded     
+        datedownloaded
+        
 }
 ```
 ### Load data into R
@@ -86,11 +86,12 @@ if(!file.exists("./data/stormData.csv.bz2")){
 file<- bzfile(description = "./data/stormData.csv.bz2", open = 'r', encoding =
 getOption('encoding'), compression = 9)
 stormdata <- read.csv(file, header = TRUE, stringsAsFactors = FALSE)
+#closeAllConnections()
 ```
 
-# Data Processing
-
 ## Initial Inspection of the data
+
+First we look at the structure of the data:
 
 ```{r initial inspection}
 
@@ -104,6 +105,7 @@ mean(is.na(stormdata$CROPDMG))
 # There are no NAs in these relevant data columns. Yay!
 ```
 
+This suggests that some data removal can be carried out:
 
 ### Reduce the size of the data set
 
@@ -120,8 +122,12 @@ str(df1)
 # filter out null rows
 df2<-filter(df1,FATALITIES+INJURIES+PROPDMG+CROPDMG>0 )
 rm(df1)
-str(df2)
+nrow(df2)
 ```
+Hence about 70% of the events reported and recorded caused neither fatalities nor injuries, nor was any economic damage to property or crops recorded.
+
+We inspect the data by year to see the time periods from when the data mainly arises:
+
 ```{r extract year from the BGN_DATE column}
 # extract year from the date column
 library(lubridate)
@@ -158,12 +164,12 @@ rm(fit.i,fit.f,fit,pt,ct,pct) # clean up
 str(annual.totals)
 ```
 
-Exploratory analysis of these annual totals
+From this analysis, we find that the annual number of reported events and the value of the damage caused is shown below in Figure 1.
 ```{r plot eda figure}
 library(ggplot2)
 
 par(mfrow = c(1, 2))
-par(mar = c(3, 4,3,1))
+par(mar = c(4, 4,3,1))
 par(bg="white")
 
 with(annual.totals,plot(Year,Fatalities.Injuries,
@@ -180,7 +186,7 @@ with(annual.totals,plot(Year,Fatalities.Injuries,
                         xlim=c(1950,2020),
                         ylim=c(0,max(annual.totals$Damage)),
                         xlab="Year",
-                        ylab="Annual crop damage",
+                        ylab="Annual property and crop damage value ($) ",
                         pch=19,
                         col="blue",
                         #main="Property and crop damage ($)"
@@ -188,12 +194,15 @@ with(annual.totals,plot(Year,Fatalities.Injuries,
         )
            
 ```
-We note a huge rise in fatalities and injuries from about 1990 onwards. This probably reflects a rise in the available volume of data, rather than an actual rise'
+  
+__Figure 1__ : Variation by year of the number of weather events recorded and the economic value of their damage to property and crops.
+
+We note a huge rise in fatalities and injuries from about 1990 onwards. This probably reflects a rise in the available volume of data, rather than an actual rise' in the number of events, but does suggest that the results of our subsequent analysis are more reflective of the last 25 years than of the first years since 1950. Further analysis could verify this.
+
+We now to turn to the main goal of our analysis, which is to fin the most damaging type of weather events in the US since 1950, as measured by impact on human health and by damage caused to property and crops. To achieve this, the data set must be cleaned. The meaning of this is explained below.
 
 
-We could investigate this here:
-
-## Analysis by type
+## Cleaning the event type data
 
 We wish to identify those weather types that have been most damaging to people, in terms of numbers of fatalities and injuries caused, and to crops and property in economic terms. The categories used will be those recognised by NOAA:
 
@@ -204,13 +213,13 @@ levtypes<-length(evtype)
 ```
 which number `r levtypes` in all
 
-and the number of event types actually recorded
+
 
 ```{r unique event record types}
 evrep<-sd.red$EVTYPE
 nevrec<-length(unique(evrep))
 ```
-of which there are `r nevrec` we see that many events must have been recorded with non-standard terms. Hence before final analysis, the recorded events have had to be mapped to one or other of the recognised categories. This has been achieved by a process of matching terms, identifying common alternative terms (eg TSTM for thunderstorm, precipitation for rain etc), and correction of obvious typographical errors eg TORNDAo etc.
+Howeever, `r nevrec` event types wereactually recorded which means that many events must have been recorded with non-standard terms. Hence before final analysis, the recorded events have had to be mapped to one or other of the recognised categories. This has been achieved by a process of matching terms, identifying common alternative terms (eg TSTM for thunderstorm, precipitation for rain etc), and correction of obvious typographical errors eg TORNDAo etc.
 
 The matching process is described below and may be skipped if not of interest. The criterion for this process was that at least 95% of the reported events should be mapped to one NOAA category. Those that could not be mapped were not included in the final analysis.
 
@@ -218,7 +227,7 @@ The matching process is described below and may be skipped if not of interest. T
 
 This is an iterative process.
 
-First, we make some substitutions:
+First, we make some substitutions to remove obvious typographical errors (eg THUNERSTORM) and to substitute NOAA category terms for other equivalent terms used in the data set (eg "RAIN" for "precipitation")
 
 * _TSTM_ replaced by _Thunderstorm_
 * _Precipitation_ replaced by _Rain_
@@ -251,15 +260,18 @@ for(i in 1:47){
         event[evred[[i]]]<-evtype[i]
 }
 ```
+The number of terms usewd that were not captured and mapped by this process is:
+
 ```{r check missing}
 missed<-evrep[grep("Other",event)]
 unique(missed)
 length(missed)
 length(missed)/length(event)
 ```
-Capture rate is `r length(missed)/length(event)`
+The capture rate is `r as.integer(100*1-(length(missed)/length(event)))` %
 
-This exceeds the threhold of 95% set for completeness of capture.
+This exceeds the threshold of 95% of recorded events set for completeness of capture, and so we include the mapped event set in the original set..
+
 
 ```{r}
 # Add the mapped weather type vector to the reduced data set
@@ -268,19 +280,58 @@ sd.red<-data.frame(select(sd.red,year:EVTYPE),
                     select(sd.red,FATALITIES:CROPDMGEXP),
                     stringsAsFactors=FALSE)
 ```
+
+### Cleaning the damage value data
+
+Damage values to property or crops should be recorded as a number of dollars together with a multipler, that is either "" (blank), denoting "as is", or "K" for a thousand, "M" for a million or "B" for a billion 1000. Since these are human estimates, there are likely to be errors, even if they had all been entered according to the scheme just described In fact, they have not.
+
+We include in our analysis only those values that have either no signifier or one of the recognised signifiers in either lower of upper case, then multiply the damage values by the appropriate factor, to give final values in millions of dollars.
+
+```{r}
+# select for valid value multipliers
+# select for valid value multipliers
+sd.redd<-sd.red[grepl("[kK]|[mM]|[bB]|[^3]|[^5]",sd.red$PROPDMGEXP),] 
+sd.redd$PROPDMGEXP<-gsub("[^kK][^mM][^bB]",'0',sd.redd$PROPDMGEXP)
+sd.redd<-sd.redd[grepl("[kK]|[mM]|[bB]",sd.redd$CROPDMGEXP),]
+sd.redd$PROPDMGEXP<-gsub("3|5","0.000001",sd.redd$PROPDMGEXP) #remove pesky 3 and 5
+
+# express damage mulipliers in billions of dollars
+sd.redd$PROPDMGEXP<-gsub("[kK]","0.000001",sd.redd$PROPDMGEXP)
+sd.redd$PROPDMGEXP<-gsub("[mM]","0.001",sd.redd$PROPDMGEXP)
+sd.redd$PROPDMGEXP<-gsub("[bB]","1",sd.redd$PROPDMGEXP)
+
+sd.redd$PROPDMGEXP<-as.numeric(sd.redd$PROPDMGEXP)
+
+sd.redd$CROPDMGEXP<-gsub("[kK]","0.000001",sd.redd$CROPDMGEXP)
+sd.redd$CROPDMGEXP<-gsub("[mM]","0.001",sd.redd$CROPDMGEXP)
+sd.redd$CROPDMGEXP<-gsub("[bB]","1",sd.redd$CROPDMGEXP)
+
+sd.redd$CROPDMGEXP<-as.numeric(sd.redd$CROPDMGEXP)
+
+# check replacements are complete
+# should all be 1e-6, 1e-3 or 1
+table(sd.redd$PROPDMGEXP)
+table(sd.redd$CROPDMGEXP)
+
+sd.redd$PROPDMG<-sd.redd$PROPDMG*sd.redd$PROPDMGEXP
+sd.redd$CROPDMG<-sd.redd$CROPDMG*sd.redd$CROPDMGEXP
+
+```
+
+### Overall Metrics of the data
 ```{r overall metrics for human impact}
 
 tfatalities <-sum(sd.red$FATALITIES)
 tinjuries<-sum(sd.red$INJURIES)
 ttotal<-tfatalities+tinjuries
 
-tpropdmg <-sum(sd.red$PROPDMG)
-tcropdmg <-sum(sd.red$cROPDMG)
+tpropdmg <-sum(sd.redd$PROPDMG)
+tcropdmg <-sum(sd.redd$CROPDMG)
 dtotal<-tpropdmg+tcropdmg
 ```
 
 
-## Ranking of Events by Human Impact
+### Ranking of Events by Human Impact
 
 ```{r human rank}
 #find fatality and injury number for each event type
@@ -300,21 +351,21 @@ injfrac<-100*human$injuries/ttotal
 totfrac<-100*human$total/ttotal
 
 # calculate sum contribution of top 5.
-top5frac<-sum(fatfrac[2:6])
-top5inj<-sum(injfrac[2:6])
-top5tot<-sum(totfrac[2:6])
+top10frac<-sum(fatfrac[2:11])
+top10inj<-sum(injfrac[2:11])
+top10tot<-sum(totfrac[2:11])
 
 # combine for reults table
 human<-cbind(human,fatfrac,injfrac,totfrac)
 human$event<-as.character(human$event)
-humantop6<-human[1:6,]
-names(humantop6)[names(humantop6)=="fatfrac"] <- "Fatalities"
-names(humantop6)[names(humantop6)=="injfrac"] <- "Injuries"
+humantop10<-human[1:11,]
+names(humantop10)[names(humantop10)=="fatfrac"] <- "Fatalities"
+names(humantop10)[names(humantop10)=="injfrac"] <- "Injuries"
 ```
 ```{r human tidy}
 # melt data for plot
 library(reshape2)
-hmelt<-melt(humantop6,id="event",measure.vars=c("Fatalities","Injuries"))
+hmelt<-melt(humantop10,id="event",measure.vars=c("Fatalities","Injuries"))
 hmelt$event<-as.factor(hmelt$event)
 hmelt$variable<-as.factor(hmelt$variable)
 hmelt<-arrange(hmelt,desc(variable),desc(value))
@@ -324,17 +375,17 @@ hmelt<-arrange(hmelt,desc(variable),desc(value))
 hmelt <- transform(hmelt, 
                 event.ord  = factor(
                      event ,
-                     levels=c( 'Lightning','Flood','Thunderstorm Wind', 'Heat','Tornado','Total'),
+                     levels=c( 'Hurricane','Winter Storm','High Wind','Ice Storm','Other','Lightning','Flood','Thunderstorm Wind', 'Heat','Tornado','Total'),
                      ordered =TRUE))
 ```
 
 
 
-## Ranking of Events by Economic Impact
+### Ranking of Events by Economic Impact
 ```{r economic  rank}
 #find property and crop damage value for each event type
-propdmg<-sd.red %>% group_by(event) %>% summarise(propdmg=sum(PROPDMG))
-cropdmg<-sd.red %>% group_by(event) %>% summarise(cropdmg=sum(CROPDMG))
+propdmg<-sd.redd %>% group_by(event) %>% summarise(propdmg=sum(PROPDMG))
+cropdmg<-sd.redd %>% group_by(event) %>% summarise(cropdmg=sum(CROPDMG))
 damage<-left_join(propdmg,cropdmg,by="event")
 damage<-mutate(damage,totald=propdmg+cropdmg)
 # add a totals row at the top
@@ -349,37 +400,39 @@ cropfrac<-100*damage$cropdmg/dtotal
 dtotfrac<-100*damage$totald/dtotal
 
 # calculate sum contribution of top 5.
-dtop5frac<-sum(propfrac[2:6])
-dtop5inj<-sum(cropfrac[2:6])
-dtop5tot<-sum(dtotfrac[2:6])
+dtop10prop<-sum(propfrac[2:11])
+dtop10crop<-sum(cropfrac[2:11])
+dtop10tot<-sum(dtotfrac[2:11])
 
 # combine for reults table
 damage<-cbind(damage,propfrac,cropfrac,dtotfrac)
 damage$event<-as.character(damage$event)
-damagetop6<-damage[1:6,]
-names(damagetop6)[names(damagetop6)=="propfrac"] <- "Property"
-names(damagetop6)[names(damagetop6)=="cropfrac"] <- "Crops"
+damagetop10<-damage[1:11,]
+names(damagetop10)[names(damagetop10)=="propfrac"] <- "Property"
+names(damagetop10)[names(damagetop10)=="cropfrac"] <- "Crops"
 ```
 ```{r damage tidy}
 # melt data for plot
 library(reshape2)
-dmelt<-melt(damagetop6,id="event",measure.vars=c("Property","Crops"))
+dmelt<-melt(damagetop10,id="event",measure.vars=c("Property","Crops"))
 dmelt$event<-as.factor(dmelt$event)
 dmelt$variable<-as.factor(dmelt$variable)
 dmelt<-arrange(dmelt,desc(variable),desc(value))
 
 ## set the levels in order we want
 
-#hmelt <- transform(hmelt, 
-#                event.ord  = factor(
-#                     event ,
-#                     levels=c( 'Lightning','Flood','Thunderstorm Wind', #'Heat','Tornado','Total'),
-#                     ordered =TRUE))
+dmelt <- transform(dmelt, 
+                eventd.ord  = factor(
+                     event ,
+                     levels=c( 'Drought','High Wind','Wildfire','Storm Surge/Tide', 'Thunderstorm Wind','Ice Storm','Hail','Tornado','Hurricane','Flood','Total'),
+                     ordered =TRUE))
 ```
 
 # Results
 
 ## Injuries and Fatalities
+
+The top 10 weather event types in respect of total fatalities and injuries caused in the US since 1950 are shown in Figure 2 below.
 
 ```{r bar chart human}
 #g<-ggplot(data=hmelt, aes(x=event, y=value, fill=variable)) +
@@ -401,18 +454,25 @@ g<-ggplot(data=hmelt,
         theme(legend.position=c(.8, .2))
 g
 ```
+  
+__Figure 2__: The top 10 categories for relative impact of weather events on human health by weather type, as measured by fatalities and injuries caused.
+  
+Of the 48 weather event types recognised by NOAA, `r as.integer(top10tot)` % of all fatalities and injuries have been caused by these 10 categories.
 
 ## Economic damage
+
+The top 10 weather event types in respect of total economic impact caused in the US since 1950 are shown in Figure 3 below, subdivided by value of damage to property and by damage to crops.
+
 ```{r bar chart economic}
 d<-ggplot(data=dmelt,
-        aes(x=event, y=value,fill=variable,order=event))+
+        aes(x=eventd.ord, y=value,fill=variable,order=eventd.ord))+
         geom_bar(stat="identity")+
         #facet_wrap(~variable)+
         coord_flip()+
         scale_y_continuous(breaks = seq(0, 100, 10))+
         theme(axis.text.x = element_text(size=14),
         axis.text.y=element_text(size=14))+
-        labs(y = "Value of damage caused")+
+        labs(y = "% of total value of damage caused")+
         theme(axis.title.x = element_text(size=14,vjust=-.5),
         axis.title.y=element_blank())+
         theme(legend.text=element_text(size=12),
@@ -420,13 +480,12 @@ d<-ggplot(data=dmelt,
         theme(legend.position=c(.8, .2))
 d
 ```
+  
+__Figure 3__: The top 10 categories for relative conomic damage to property and crops caused by weather events, by weather type.
 
+Of the 48 weather event types recognised by NOAA, `r as.integer(dtop10tot)` % of all damage value to property and crops have been caused by these 10 categories.
 
-Required
-
-At least 1 figure containing a plot
-
-No more than 3 Figures
-
-Include all code. Use echo = TRUE
-
+```{r}
+# clean workspace
+rm(list=ls())
+```
